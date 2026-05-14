@@ -15,13 +15,7 @@ pub fn build(b: *std.Build) void {
     // POSIX/GNU extensions required for sigaction, vfork, asprintf, isascii, etc.
     lib_mod.addCMacro("_GNU_SOURCE", "");
 
-    const lib = b.addLibrary(.{
-        .name = "magic",
-        .root_module = lib_mod,
-        .linkage = linkage,
-    });
-
-    lib.addIncludePath(b.path("src"));
+    lib_mod.addIncludePath(b.path("src"));
 
     const flags: []const []const u8 = &.{
         "-std=gnu11",
@@ -33,7 +27,7 @@ pub fn build(b: *std.Build) void {
     };
 
     // Core library sources (always compiled)
-    lib.addCSourceFiles(.{
+    lib_mod.addCSourceFiles(.{
         .files = &.{
             "src/apprentice.c",
             "src/apptype.c",
@@ -75,7 +69,7 @@ pub fn build(b: *std.Build) void {
 
     if (!is_unix) {
         // Windows: compile all compat sources
-        lib.addCSourceFiles(.{
+        lib_mod.addCSourceFiles(.{
             .files = &.{
                 "src/strlcpy.c",
                 "src/strlcat.c",
@@ -95,7 +89,7 @@ pub fn build(b: *std.Build) void {
         });
     } else if (is_linux) {
         // Linux (glibc/musl): only fmtcheck is missing
-        lib.addCSourceFiles(.{
+        lib_mod.addCSourceFiles(.{
             .files = &.{"src/fmtcheck.c"},
             .flags = flags,
         });
@@ -105,7 +99,13 @@ pub fn build(b: *std.Build) void {
     }
     // macOS: everything is in libc, no compat sources needed
 
-    // Public header
+    const lib = b.addLibrary(.{
+        .name = "magic",
+        .root_module = lib_mod,
+        .linkage = linkage,
+    });
+
+    // Public header — installHeader stays on *Step.Compile in 0.16
     lib.installHeader(b.path("src/magic.h"), "magic.h");
 
     b.installArtifact(lib);
