@@ -5,6 +5,13 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+/* Ensure __GLIBC__ is defined (if applicable) before the strlcpy/strlcat
+ * availability check below. On Linux, <features.h> sets __GLIBC__ for glibc
+ * and is a harmless stub on musl. */
+#if defined(__linux__)
+  #include <features.h>
+#endif
+
 #define VERSION "5.46"
 #define PACKAGE_VERSION "5.46"
 
@@ -63,8 +70,10 @@
   #define HAVE_WCWIDTH 1
   #define HAVE_MKSTEMP 1
   #define HAVE_UTIMES 1
-  #define HAVE_STRLCPY 1
-  #define HAVE_STRLCAT 1
+  #if !defined(__linux__) || !defined(__GLIBC__)
+    #define HAVE_STRLCPY 1
+    #define HAVE_STRLCAT 1
+  #endif
   #define HAVE_STRCASESTR 1
 
   #ifdef __APPLE__

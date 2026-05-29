@@ -57,15 +57,20 @@ pub fn build(b: *std.Build) void {
     // target's libc. The upstream Makefile uses AC_REPLACE_FUNCS for this;
     // here we hard-code knowledge of what each platform provides.
     const os_tag = target.result.os.tag;
+    const abi = target.result.abi;
     const is_unix = os_tag != .windows;
     const is_linux = os_tag == .linux;
     const is_macos = os_tag == .macos;
 
     // On Unix (Linux/macOS/BSD): libc provides most of these.
-    // strlcpy, strlcat: in macOS libc, musl, glibc 2.38+
+    // strlcpy, strlcat: macOS libc + musl have them; glibc only gained them in
+    //   2.38 (Aug 2023). Zig's bundled glibc headers don't declare them for the
+    //   default target, so compiling against glibc fails with "undeclared library
+    //   function 'strlcpy'". Compile the bundled fallbacks on glibc-Linux.
     // strcasestr: in macOS libc, glibc, musl
     // fmtcheck: in macOS/BSD libc only — NOT in glibc or musl
     // Others (pread, getline, *_r, asprintf, vasprintf, dprintf): in all Unix libcs
+    const is_musl = abi == .musl or abi == .musleabi or abi == .musleabihf;
 
     if (!is_unix) {
         // Windows: compile all compat sources
@@ -88,11 +93,20 @@ pub fn build(b: *std.Build) void {
             .flags = flags,
         });
     } else if (is_linux) {
-        // Linux (glibc/musl): only fmtcheck is missing
-        lib_mod.addCSourceFiles(.{
-            .files = &.{"src/fmtcheck.c"},
-            .flags = flags,
-        });
+        // Linux: fmtcheck always missing. On glibc, strlcpy/strlcat are also
+        // unavailable in Zig's target headers (glibc < 2.38), so compile the
+        // bundled fallbacks there. musl provides strlcpy/strlcat natively.
+        if (is_musl) {
+            lib_mod.addCSourceFiles(.{
+                .files = &.{"src/fmtcheck.c"},
+                .flags = flags,
+            });
+        } else {
+            lib_mod.addCSourceFiles(.{
+                .files = &.{ "src/fmtcheck.c", "src/strlcpy.c", "src/strlcat.c" },
+                .flags = flags,
+            });
+        }
     } else if (!is_macos) {
         // Other BSDs: assume fmtcheck is available, nothing needed
         // (FreeBSD, OpenBSD, NetBSD all have fmtcheck in libc)
